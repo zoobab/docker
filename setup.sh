@@ -72,13 +72,12 @@ sudo /etc/init.d/tomcat7 stop
 # we are using supervisorctl (not systemd) in, so we apply all the configuration changes before running supervisorctl at
 # the end of this script
 
-
 # Setup the BigBlueButton configuration files
 #
 PROTOCOL_HTTP=http
-PROTOCOL_RTMP=rtmp
+SERVLET_DIR=/usr/share/bbb-web
 
-IP=$(echo "$(LANG=c ifconfig  | awk -v RS="" '{gsub (/\n[ ]*inet /," ")}1' | grep ^et.* | grep addr: | head -n1 | sed 's/.*addr://g' | sed 's/ .*//g')$(LANG=c ifconfig  | awk -v RS="" '{gsub (/\n[ ]*inet /," ")}1' | grep ^en.* | grep addr: | head -n1 | sed 's/.*addr://g' | sed 's/ .*//g')" | head -n1)
+IP=$(hostname -I | cut -f1 -d' ')
 
 xmlstarlet edit --inplace --update '//X-PRE-PROCESS[@cmd="set" and starts-with(@data, "external_rtp_ip=")]/@data' --value "external_rtp_ip=stun:coturn" /opt/freeswitch/conf/vars.xml
 xmlstarlet edit --inplace --update '//X-PRE-PROCESS[@cmd="set" and starts-with(@data, "external_sip_ip=")]/@data' --value "external_sip_ip=stun:coturn" /opt/freeswitch/conf/vars.xml
@@ -93,26 +92,30 @@ fi
 
 sed -i "s/proxy_pass .*/proxy_pass $PROTOCOL_HTTP:\/\/$IP:5066;/g" /etc/bigbluebutton/nginx/sip.nginx
 
-sed -i "s/http[s]*:\/\/\([^\"\/]*\)\([\"\/]\)/$PROTOCOL_HTTP:\/\/$HOST\2/g"  /var/www/bigbluebutton/client/conf/config.xml
-sed -i "s/rtmp[s]*:\/\/\([^\"\/]*\)\([\"\/]\)/$PROTOCOL_RTMP:\/\/$HOST\2/g" /var/www/bigbluebutton/client/conf/config.xml
+# sed -i "s/http[s]*:\/\/\([^\"\/]*\)\([\"\/]\)/$PROTOCOL_HTTP:\/\/$HOST\2/g"  /var/www/bigbluebutton/client/conf/config.xml
+# sed -i "s/rtmp[s]*:\/\/\([^\"\/]*\)\([\"\/]\)/$PROTOCOL_RTMP:\/\/$HOST\2/g" /var/www/bigbluebutton/client/conf/config.xml
 
 sed -i "s/server_name  .*/server_name  $HOST;/g" /etc/nginx/sites-available/bigbluebutton
 
 sed -i "s/bigbluebutton.web.serverURL=http[s]*:\/\/.*/bigbluebutton.web.serverURL=$PROTOCOL_HTTP:\/\/$HOST/g" \
-  /var/lib/tomcat7/webapps/bigbluebutton/WEB-INF/classes/bigbluebutton.properties
+  $SERVLET_DIR/WEB-INF/classes/bigbluebutton.properties
 
 # Update Java screen share configuration
-change_var_value /usr/share/red5/webapps/screenshare/WEB-INF/screenshare.properties streamBaseUrl rtmp://$HOST/screenshare
-change_var_value /usr/share/red5/webapps/screenshare/WEB-INF/screenshare.properties jnlpUrl $PROTOCOL_HTTP://$HOST/screenshare
-change_var_value /usr/share/red5/webapps/screenshare/WEB-INF/screenshare.properties jnlpFile $PROTOCOL_HTTP://$HOST/screenshare/screenshare.jnlp
+# change_var_value /usr/share/red5/webapps/screenshare/WEB-INF/screenshare.properties streamBaseUrl rtmp://$HOST/screenshare
+# change_var_value /usr/share/red5/webapps/screenshare/WEB-INF/screenshare.properties jnlpUrl $PROTOCOL_HTTP://$HOST/screenshare
+# change_var_value /usr/share/red5/webapps/screenshare/WEB-INF/screenshare.properties jnlpFile $PROTOCOL_HTTP://$HOST/screenshare/screenshare.jnlp
 
-change_var_value /usr/share/red5/webapps/sip/WEB-INF/bigbluebutton-sip.properties bbb.sip.app.ip $IP
-change_var_value /usr/share/red5/webapps/sip/WEB-INF/bigbluebutton-sip.properties freeswitch.ip $IP
+# change_var_value /usr/share/red5/webapps/sip/WEB-INF/bigbluebutton-sip.properties bbb.sip.app.ip $IP
+# change_var_value /usr/share/red5/webapps/sip/WEB-INF/bigbluebutton-sip.properties freeswitch.ip $IP
 
-change_yml_value /usr/local/bigbluebutton/bbb-webrtc-sfu/config/default.yml kurentoUrl "ws://$IP:8888/kurento"
-change_yml_value /usr/local/bigbluebutton/bbb-webrtc-sfu/config/default.yml kurentoIp "$IP"
-change_yml_value /usr/local/bigbluebutton/bbb-webrtc-sfu/config/default.yml localIpAddress "$IP"
-change_yml_value /usr/local/bigbluebutton/bbb-webrtc-sfu/config/default.yml ip "$IP"
+TARGET=/usr/local/bigbluebutton/bbb-webrtc-sfu/config/default.yml
+
+yq w -i $TARGET localIpAddress "$IP"
+yq w -i $TARGET kurento[0].ip  "$IP"
+yq w -i $TARGET kurento[0].url "ws://$SERVER_URL:8888/kurento"
+yq w -i $TARGET freeswitch.ip $IP
+
+chown bigbluebutton:bigbluebutton $TARGET
 
 sed -i  "s/bbbWebAPI[ ]*=[ ]*\"[^\"]*\"/bbbWebAPI=\"${PROTOCOL_HTTP}:\/\/$HOST\/bigbluebutton\/api\"/g" \
   /usr/share/bbb-apps-akka/conf/application.conf
@@ -204,12 +207,41 @@ cat > /opt/freeswitch/conf/autoload_configs/acl.conf.xml << HERE
 </configuration>
 HERE
 
+cat > /usr/share/meteor/bundle/systemd_start.sh << HERE
+#!/bin/bash -e
+#Allow to run outside of directory
+# change to start meteor in production (https) or development (http) mode
+ENVIRONMENT_TYPE=development
+
+echo "Starting mongoDB"
+
+#wait for mongo startup
+
+while [ "$MONGO_OK" = "0" ]; do
+    MONGO_OK=`netstat -lan | grep 127.0.1.1 | grep 27017 &> /dev/null && echo 1 || echo 0`
+    sleep 1;
+done;
+
+echo "Mongo started";
+
+cd /usr/share/meteor/bundle
+export ROOT_URL=http://127.0.0.1/html5client
+export MONGO_URL=mongodb://127.0.1.1/meteor
+export NODE_ENV=$ENVIRONMENT_TYPE
+PORT=3000 /usr/share/node-v8.11.4-linux-x64/bin/node main.js
+HERE
+
+mkdir -p /mnt/mongo-ramdisk
+mkdir -p /data/db
+chown mongodb:mongodb /mnt/mongo-ramdisk
+chown mongodb:mongodb /data/db
+
 
 # Ensure bbb-apps-akka has the latest shared secret from bbb-web
 if [ -z "$SECRET" ]; then 
-  SECRET=$(cat /var/lib/tomcat7/webapps/bigbluebutton/WEB-INF/classes/bigbluebutton.properties | grep -v '#' | grep securitySalt | cut -d= -f2);
+  SECRET=$(cat $SERVLET_DIR/WEB-INF/classes/bigbluebutton.properties | grep -v '#' | grep securitySalt | cut -d= -f2);
 else
-  change_var_value /var/lib/tomcat7/webapps/bigbluebutton/WEB-INF/classes/bigbluebutton.properties securitySalt $SECRET
+  change_var_value $SERVLET_DIR//WEB-INF/classes/bigbluebutton.properties securitySalt $SECRET
   sed -i "s/String salt = .*/String salt = \"$SECRET\";/g" /var/lib/tomcat7/webapps/demo/bbb_api_conf.jsp
 fi
 
