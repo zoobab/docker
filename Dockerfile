@@ -2,7 +2,7 @@ FROM ubuntu:16.04
 MAINTAINER ffdixon@bigbluebutton.org
 
 ENV DEBIAN_FRONTEND noninteractive
-RUN echo 'Acquire::http::Proxy "http://192.168.0.130:3142 ";'  > /etc/apt/apt.conf.d/01proxy
+# RUN echo 'Acquire::http::Proxy "http://192.168.0.130:3142    ";'  > /etc/apt/apt.conf.d/01proxy
 RUN apt-get update && apt-get install -y wget apt-transport-https
 
 RUN echo "deb http://ubuntu.bigbluebutton.org/xenial-220-dev bigbluebutton-xenial main " | tee /etc/apt/sources.list.d/bigbluebutton.list
@@ -11,10 +11,12 @@ RUN wget http://ubuntu.bigbluebutton.org/repo/bigbluebutton.asc -O- | apt-key ad
 RUN apt-get install -y language-pack-en
 RUN update-locale LANG=en_US.UTF-8
 
-RUN apt-get update && apt-get install -y wget software-properties-common
+RUN apt-get update && apt-get install -y wget software-properties-common ruby
 
 RUN add-apt-repository ppa:jonathonf/ffmpeg-4 -y
-RUN LC_CTYPE=en_US.UTF-8 add-apt-repository ppa:rmescandon/yq -y
+#RUN LC_CTYPE=en_US.UTF-8 add-apt-repository ppa:rmescandon/yq -y
+RUN locale -a
+RUN LC_ALL=C.UTF-8 add-apt-repository ppa:rmescandon/yq -y
 RUN apt-get update && apt-get -y dist-upgrade
 
 # -- Setup tomcat7 to run under docker
@@ -29,10 +31,14 @@ RUN sed -i 's|securerandom.source=file:/dev/random|securerandom.source=file:/dev
 ADD mod/tomcat7 /etc/init.d/tomcat7
 RUN chmod +x /etc/init.d/tomcat7
 
-# -- Install BigBlueButton
+# -- Install supporting files for BigBlueButton
 RUN echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | debconf-set-selections
-#RUN apt-get install -y bigbluebutton 
-#RUN apt-get install -y bbb-demo 
+ADD journald-native /tmp/journald-native
+RUN cd /tmp/journald-native && gem build journald-native.gemspec && gem install journald-native-1.0.11.gem
+RUN apt-get install -y bbb-etherpad
+RUN echo "secret" > /usr/share/etherpad-lite/APIKEY.txt && chown etherpad:etherpad /usr/share/etherpad-lite/APIKEY.txt
+
+# -- Install BigBlueButton
 RUN apt-get install -y bigbluebutton 
 RUN apt-get install -y bbb-demo 
 

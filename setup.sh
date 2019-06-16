@@ -99,6 +99,9 @@ sed -i "s/server_name  .*/server_name  $HOST;/g" /etc/nginx/sites-available/bigb
 
 sed -i "s/bigbluebutton.web.serverURL=http[s]*:\/\/.*/bigbluebutton.web.serverURL=$PROTOCOL_HTTP:\/\/$HOST/g" \
   $SERVLET_DIR/WEB-INF/classes/bigbluebutton.properties
+sed -i 's/^attendeesJoinViaHTML5Client=.*/attendeesJoinViaHTML5Client=true/'   $SERVLET_DIR/WEB-INF/classes/bigbluebutton.properties
+sed -i 's/^moderatorsJoinViaHTML5Client=.*/moderatorsJoinViaHTML5Client=true/' $SERVLET_DIR/WEB-INF/classes/bigbluebutton.properties
+
 
 # Update Java screen share configuration
 # change_var_value /usr/share/red5/webapps/screenshare/WEB-INF/screenshare.properties streamBaseUrl rtmp://$HOST/screenshare
@@ -228,7 +231,7 @@ cd /usr/share/meteor/bundle
 export ROOT_URL=http://127.0.0.1/html5client
 export MONGO_URL=mongodb://127.0.1.1/meteor
 export NODE_ENV=$ENVIRONMENT_TYPE
-PORT=3000 /usr/share/node-v8.11.4-linux-x64/bin/node main.js
+PORT=3000 /usr/share/node-v8.15.1-linux-x64/bin/node main.js
 HERE
 
 mkdir -p /mnt/mongo-ramdisk
@@ -255,8 +258,8 @@ sed -i "s/playback_host: .*/playback_host: $HOST/g" /usr/local/bigbluebutton/cor
 
 sed -i 's/daemonize no/daemonize yes/g' /etc/redis/redis.conf
 
-sed -i "s|\"wsUrl.*|\"wsUrl\": \"ws://$HOST/bbb-webrtc-sfu\",|g" \
-  /usr/share/meteor/bundle/programs/server/assets/app/config/settings-production.json
+
+#yq w -i /usr/share/meteor/bundle/programs/server/assets/app/config/settings.yaml localIpAddress "$IP"
 
 rm /usr/share/red5/log/sip.log
 
