@@ -21,7 +21,7 @@ set -x
 
 cd "$(dirname "$0")"
 
-useradd bbb --uid 1099 -s /bin/bash
+useradd bbb
 mkdir /home/bbb
 chown bbb /home/bbb
 echo "bbb ALL=(ALL:ALL) NOPASSWD: ALL" | tee /etc/sudoers.d/bbb
@@ -31,21 +31,9 @@ echo "bbb:bbb" | chpasswd
 # Allow to have executable files in /tmp/ folder (tomcat JNA)
 mount /tmp -o remount,exec
 
-sed -i 's/bind 127.0.0.1 ::1/bind 127.0.0.1/g'  /etc/redis/redis.conf
-
 #./bbb-install.sh -d -s "`hostname -f`" -v bionic-230-dev -a
-sed -i 's/  install_HTML5/  exit\n  install_HTML5/g' /opt/docker-bbb/bbb-install.sh
-cd /opt/docker-bbb
-./bbb-install.sh -d -s droplet-935.meetbbb.com -v bionic-230-dev -a
 
-sed -i 's/::/0.0.0.0/g' /opt/freeswitch/etc/freeswitch/autoload_configs/event_socket.conf.xml
-if [ -f /opt/freeswitch/conf/sip_profiles/external-ipv6.xml ]; then
-  mv /opt/freeswitch/conf/sip_profiles/external-ipv6.xml /opt/freeswitch/conf/sip_profiles/external-ipv6.xml_
-fi
-if [ -f /opt/freeswitch/conf/sip_profiles/internal-ipv6.xml ]; then
-  mv /opt/freeswitch/conf/sip_profiles/internal-ipv6.xml /opt/freeswitch/conf/sip_profiles/internal-ipv6.xml_
-fi
-bbb-conf --restart
+./bbb-install.sh -d -s droplet-923.meetbbb.com -v bionic-230-dev -a
 
 exit
 
